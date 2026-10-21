@@ -2,7 +2,7 @@
 
 **Несколько почтовых ящиков Kerio Connect в одном браузере, на одном домене, с переключением через меню профиля.** Бесплатный серверный модуль с открытым исходным кодом для Windows. Подходит, когда нужно работать с двумя или несколькими аккаунтами Керио без постоянного выхода и повторного ввода пароля.
 
-[**Скачать EXE или ZIP**](https://github.com/dasterinvalid-hue/kerio-account-switcher/releases/tag/v1.0.1) · [English installation guide](https://github.com/dasterinvalid-hue/kerio-account-switcher/blob/main/README.en.md) · [Сообщить об ошибке](https://github.com/dasterinvalid-hue/kerio-account-switcher/issues) · [Лицензия MIT](https://github.com/dasterinvalid-hue/kerio-account-switcher/blob/main/LICENSE)
+[**Скачать EXE или ZIP**](https://github.com/dasterinvalid-hue/kerio-account-switcher/releases/tag/v1.0.2) · [English installation guide](https://github.com/dasterinvalid-hue/kerio-account-switcher/blob/main/README.en.md) · [Сообщить об ошибке](https://github.com/dasterinvalid-hue/kerio-account-switcher/issues) · [Лицензия MIT](https://github.com/dasterinvalid-hue/kerio-account-switcher/blob/main/LICENSE)
 
 **Kerio Connect multi-account switcher:** use multiple Kerio webmail accounts in the same browser, with separate sessions and per-account logout. Install once on your Windows mail server; no browser extension is required.
 
@@ -16,9 +16,17 @@
 
 Например, сотрудник может переключаться между личным рабочим ящиком и общим ящиком отдела, если у него есть данные для входа в оба. Модуль не создаёт аккаунты и не меняет права доступа: авторизацию по-прежнему выполняет Kerio.
 
-Версия **1.0.1**. Целевая и проверяемая версия: **Kerio Connect 10.0.9 (9754), Windows x64**. Модуль независимый, не является официальным плагином GFI. Совместимость с другими сборками Kerio нужно проверять на стенде.
+Версия **1.0.2**. Целевая и проверяемая версия: **Kerio Connect 10.0.9 (9754), Windows x64**. Модуль независимый, не является официальным плагином GFI. Совместимость с другими сборками Kerio нужно проверять на стенде.
 
 Выпуск опубликован как предварительный (`pre-release`). Инструкция ниже описывает установку, механизм работы и откат.
+
+## Управление входами в 1.0.2
+
+Справа от каждой карточки есть кнопка **«Выйти»**: она завершает сеанс в Kerio и убирает ящик из списка этого браузера. Сам почтовый ящик и письма не удаляются. Выход из другого ящика оставляет текущую страницу открытой. При выходе из текущего открывается оставшийся аккаунт; после выхода из последнего — форма авторизации. Нижний пункт «Выход» действует так же для текущего аккаунта.
+
+Повторный вход с тем же адресом не создаёт вторую карточку. Старые дубли объединяются при загрузке; выход из такой карточки завершает связанные с ней сеансы. Открытые вкладки получают изменение списка. При сетевой ошибке карточка остаётся, чтобы выход можно было повторить.
+
+Для обновления установленного модуля можно запустить новый EXE или `windows/Update-1.0.2.ps1` из распакованного ZIP. Перезапускается только служба модуля, KerioMailServer продолжает работать. После обновления перезагрузите открытые вкладки веб-почты.
 
 ## Исправление в 1.0.1
 
@@ -32,11 +40,11 @@
 
 [Релизы и установочные файлы](https://github.com/dasterinvalid-hue/kerio-account-switcher/releases)
 
-- `KerioAccountSwitcher-Setup-1.0.1.exe` — мастер установки на русском, требуется администратор Windows.
-- `KerioAccountSwitcher-1.0.1-windows-x64.zip` — обычный архив с теми же файлами, исходниками и скриптом установки.
+- `KerioAccountSwitcher-Setup-1.0.2.exe` — мастер установки на русском, требуется администратор Windows.
+- `KerioAccountSwitcher-1.0.2-windows-x64.zip` — обычный архив с теми же файлами, исходниками и скриптом установки.
 - `SHA256SUMS.txt` — контрольные суммы файлов релиза.
 
-Node.js 24.22.0 x64 включён в оба пакета. Интернет для установки не требуется. Установщик не подписан коммерческим сертификатом издателя; Windows может показать «Неизвестный издатель». Проверить загрузку можно командой `Get-FileHash .\KerioAccountSwitcher-Setup-1.0.1.exe -Algorithm SHA256` и сравнением с файлом контрольных сумм.
+Node.js 24.22.0 x64 включён в оба пакета. Интернет для установки не требуется. Установщик не подписан коммерческим сертификатом издателя; Windows может показать «Неизвестный издатель». Проверить загрузку можно командой `Get-FileHash .\KerioAccountSwitcher-Setup-1.0.2.exe -Algorithm SHA256` и сравнением с файлом контрольных сумм.
 
 ## Установка через EXE
 
@@ -124,10 +132,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Program Files\Kerio 
 
 ## Обновление и сборка
 
-Для перехода **с 1.0.0 на 1.0.1** распакуйте новый ZIP в отдельную папку на сервере и выполните из неё в PowerShell администратора:
+Для перехода **с 1.0.0 или 1.0.1 на 1.0.2** распакуйте новый ZIP в отдельную папку на сервере и выполните из неё в PowerShell администратора:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Update-1.0.1.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Update-1.0.2.ps1
 ```
 
 Для нестандартного каталога добавьте `-InstallDir "D:\Kerio Account Switcher"`. Скрипт проверяет версию, путь службы и контрольные суммы, сохраняет изменяемые файлы в `backup`, заменяет обработчик и перезапускает только модуль. Служба Kerio и её настройки не изменяются. При неудачной проверке HTTPS файлы восстанавливаются. После успешного обновления перезапустите браузер, если в нём уже накопились запросы старой версии. EXE предназначен для новой установки; для обновления используйте этот скрипт из ZIP.
@@ -175,7 +183,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Test-Config.ps
 
 ### Что делать, если после переключений зависает загрузка почты?
 
-В 1.0.1 исправлено накопление фоновых запросов в Chromium. Обновите модуль с помощью `windows/Update-1.0.1.ps1`, сохраните работу и полностью перезапустите браузер. Если проблема повторяется, [создайте issue](https://github.com/dasterinvalid-hue/kerio-account-switcher/issues/new) с версией Kerio, модуля, Windows и браузера, шагами воспроизведения и текстом ошибки без секретов.
+В 1.0.1 исправлено накопление фоновых запросов в Chromium. Обновите модуль с помощью `windows/Update-1.0.2.ps1`, сохраните работу и полностью перезапустите браузер. Если проблема повторяется, [создайте issue](https://github.com/dasterinvalid-hue/kerio-account-switcher/issues/new) с версией Kerio, модуля, Windows и браузера, шагами воспроизведения и текстом ошибки без секретов.
 
 ## Помощь проекту
 

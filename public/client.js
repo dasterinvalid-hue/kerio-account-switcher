@@ -65,13 +65,31 @@
     const submit=HTMLFormElement.prototype.submit;
     HTMLFormElement.prototype.submit=function(){this.action=mapUrl(this.action);return submit.call(this);};
   }
-  function readAccounts(){
-    try{const value=JSON.parse(storage.getItem(registryKey)||'[]');return Array.isArray(value)?value.filter(a=>a&&typeof a.name==='string'&&a.name.length<=160&&(a.id==='primary'||/^[a-f0-9]{32}$/.test(a.id))).slice(0,8):[];}catch{return [];}
+  const registry=window.KerioAccountRegistry;
+  if(!registry)return;
+  function readAccounts(){try{return registry.normalize(JSON.parse(storage.getItem(registryKey)||'[]'));}catch{return [];}}
+  function writeAccounts(entries){storage.setItem(registryKey,JSON.stringify(entries));}
+  function saveAccount(id,name,displayName){writeAccounts(registry.remember(readAccounts(),id,name,displayName));}
+  const current=account=>registry.slots(account).includes(slot);
+  if(/\/webmail\/login(?:\/|$)/.test(location.pathname)){
+    writeAccounts(registry.forgetSlot(readAccounts(),slot));
+    return;
   }
-  function saveAccount(id,name,displayName){
-    const entries=readAccounts().filter(a=>a.id!==id);
-    entries.push({id,name:String(name).slice(0,160),displayName:String(displayName||name).slice(0,160)});
-    storage.setItem(registryKey,JSON.stringify(entries.slice(-8)));
+  function endSession(id){
+    return new Promise((resolve,reject)=>{
+      const nonce=crypto.randomUUID(),frame=document.createElement('iframe');
+      frame.hidden=true;frame.title='Выход из аккаунта';
+      const finish=ok=>{clearTimeout(timeout);window.removeEventListener('message',receive);frame.remove();ok?resolve():reject(new Error('logout failed'));};
+      function receive(event){
+        if(event.origin!==location.origin||event.source!==frame.contentWindow||event.data?.nonce!==nonce)return;
+        if(event.data.type==='kas-ready')frame.contentWindow.postMessage({type:'kas-end',nonce},location.origin);
+        if(event.data.type==='kas-ended')finish(event.data.ok===true);
+      }
+      const timeout=setTimeout(()=>finish(false),20000);
+      window.addEventListener('message',receive);
+      frame.src='/_kas/bridge?account='+id+'#'+nonce;
+      document.body.appendChild(frame);
+    });
   }
   // Leave the current account's document before navigating to the primary
   // /webmail/ URL; otherwise its worker can map the navigation back to itself.
@@ -94,7 +112,14 @@
     sizeMenu();
     const style=document.createElement('style');
     style.textContent=`
-      .basis-profile-menu .basis-account{border-radius:10px;margin:4px 6px;white-space:normal!important;}
+      .basis-profile-menu .basis-account{border-radius:10px;margin:4px 6px!important;white-space:normal!important;display:flex;align-items:center;width:calc(100% - 12px)!important;box-sizing:border-box;}
+      .basis-profile-menu .basis-account-switch{display:flex;align-items:center;gap:10px;flex:1;min-width:0;border:0;background:transparent;text-align:left;padding:10px;color:#202124;cursor:pointer;font:inherit;min-height:68px;}
+      .basis-profile-menu .basis-account-current .basis-account-switch{cursor:default;}
+      .basis-profile-menu .basis-account-switch:hover{background:#f1f4f8;border-radius:10px;}
+      .basis-profile-menu .basis-account button:focus-visible{outline:2px solid #147b84;outline-offset:-2px;border-radius:8px;}
+      .basis-profile-menu .basis-account-end{flex:0 0 auto;border:0;border-radius:6px;background:transparent;color:#52616b;font:12px Arial,sans-serif;padding:10px 7px;margin:0 8px 0 0;min-height:40px;cursor:pointer;}
+      .basis-profile-menu .basis-account-end:hover{background:#fce8e6;color:#a32923;}
+      .basis-profile-menu .basis-account button:disabled{opacity:.55;cursor:wait;}
       .basis-profile-menu .basis-account .x-menu-item-link{display:flex!important;align-items:center;box-sizing:border-box;height:auto!important;min-height:72px;padding:12px!important;margin:0!important;line-height:normal!important;cursor:pointer;}
       .basis-profile-menu .basis-account .x-menu-item-text{margin:0!important;display:block!important;width:100%;min-width:0;white-space:normal!important;}
       .basis-profile-menu .basis-account .x-menu-item-icon{display:none!important;}
@@ -103,7 +128,7 @@
       .basis-profile-menu .basis-account:not(.basis-account-current):hover,.basis-profile-menu .basis-account:not(.basis-account-current).x-menu-item-active{background:#f1f4f8;}
       .basis-profile-menu .basis-account .x-menu-item-link:focus-visible{outline:2px solid #147b84;outline-offset:-2px;border-radius:10px;}
       .basis-profile-menu .basis-account-row{display:flex;align-items:center;gap:12px;min-height:44px;}
-      .basis-profile-menu .basis-account-avatar{display:flex;align-items:center;justify-content:center;flex:0 0 44px;height:44px;border-radius:50%;background:#169fa8;color:white;font-size:18px;line-height:1;}
+      .basis-profile-menu .basis-account-avatar{display:flex;align-items:center;justify-content:center;flex:0 0 38px;height:38px;border-radius:50%;background:#169fa8;color:white;font-size:16px;line-height:1;}
       .basis-profile-menu .basis-account-copy{display:block;min-width:0;flex:1;}
       .basis-profile-menu .basis-account-name{display:block;white-space:normal;overflow-wrap:anywhere;font-size:14px;line-height:20px;color:#202124;}
       .basis-profile-menu .basis-account-email{display:block;white-space:normal;overflow-wrap:anywhere;font-size:13px;line-height:18px;color:#5f6368;margin-top:3px;}
@@ -114,23 +139,62 @@
     `;
     document.head.appendChild(style);
     const encode=value=>Ext.String.htmlEncode(String(value));
+    let busy=false;
+    function goToRemaining(){
+      const next=readAccounts()[0];
+      location.replace(next?href(next.id):'/_kas/connect?account=primary');
+    }
+    async function signOut(account){
+      if(busy||!account)return;
+      busy=true;refresh();
+      try{
+        for(const id of registry.slots(account))await endSession(id);
+        const ids=new Set(registry.slots(account));
+        let entries=readAccounts();
+        for(const id of ids)entries=registry.forgetSlot(entries,id);
+        writeAccounts(entries);
+        if(ids.has(slot)){goToRemaining();return;}
+      }catch{Ext.Msg.alert('Не удалось выйти','Сервер не подтвердил выход. Аккаунт оставлен в списке. Повторите попытку после восстановления связи.');}
+      finally{busy=false;refresh();}
+    }
     function accountLabel(account){
       const name=typeof account.displayName==='string'?account.displayName:account.name;
       const initials=name.trim().split(/\s+/).slice(0,2).map(part=>Array.from(part)[0]||'').join('').toUpperCase();
-      return '<span class="basis-account-row"><span class="basis-account-avatar" aria-hidden="true">'+encode(initials)+'</span><span class="basis-account-copy">'+(account.id===slot?'<span class="basis-account-status">Текущий аккаунт</span>':'')+'<span class="basis-account-name">'+encode(name)+'</span><span class="basis-account-email">'+encode(account.name)+'</span></span>'+(account.id===slot?'<span class="basis-account-check" aria-hidden="true">✓</span>':'')+'</span>';
+      return '<button type="button" class="basis-account-switch" data-kas-switch="'+account.id+'"'+(busy?' disabled':'')+'><span class="basis-account-avatar" aria-hidden="true">'+encode(initials)+'</span><span class="basis-account-copy">'+(current(account)?'<span class="basis-account-status">Текущий аккаунт</span>':'')+'<span class="basis-account-name">'+encode(name)+'</span><span class="basis-account-email">'+encode(account.name)+'</span></span></button><button type="button" class="basis-account-end" data-kas-end="'+account.id+'" aria-label="'+encode('Выйти из '+account.name)+'" title="Выйти и убрать из списка"'+(busy?' disabled':'')+'>Выйти</button>';
     }
     function refresh(){
       sizeMenu();
       for(const item of accountMenu.items.items.slice())if(item.basisAccountEntry)accountMenu.remove(item,true);
       let index=0;
       const accounts=readAccounts().filter(a=>a.name!=='Новый аккаунт');
-      accounts.sort((a,b)=>Number(b.id===slot)-Number(a.id===slot));
+      accounts.sort((a,b)=>Number(current(b))-Number(current(a)));
       for(const account of accounts){
-        accountMenu.insert(index++,{basisAccountEntry:true,text:accountLabel(account),cls:'basis-account'+(account.id===slot?' basis-account-current':''),handler:()=>{if(account.id!==slot)location.assign(href(account.id));}});
+        accountMenu.insert(index++,{xtype:'component',basisAccountEntry:true,html:accountLabel(account),cls:'basis-account'+(current(account)?' basis-account-current':'')});
       }
-      accountMenu.insert(index++,{basisAccountEntry:true,text:'＋ Добавить аккаунт',cls:'basis-account-add',handler:addAccount});
+      accountMenu.insert(index++,{basisAccountEntry:true,text:'＋ Добавить аккаунт',cls:'basis-account-add',disabled:busy,handler:addAccount});
       accountMenu.insert(index,{xtype:'menuseparator',basisAccountEntry:true});
     }
+    document.addEventListener('click',event=>{
+      const end=event.target.closest?.('[data-kas-end]'),change=event.target.closest?.('[data-kas-switch]');
+      if(!end&&!change)return;
+      event.preventDefault();event.stopImmediatePropagation();
+      if(busy)return;
+      const id=(end||change).getAttribute(end?'data-kas-end':'data-kas-switch');
+      const account=readAccounts().find(a=>a.id===id);
+      if(end)signOut(account);
+      else if(account&&!current(account))location.assign(href(account.id));
+    },true);
+    const nativeLogout=accountMenu.items.items.find(item=>item.itemId==='logout');
+    if(nativeLogout){
+      const index=accountMenu.items.items.indexOf(nativeLogout),text=nativeLogout.text||'Выход';
+      accountMenu.remove(nativeLogout,true);
+      accountMenu.insert(index,{text,itemId:'basisLogout',handler:()=>signOut(readAccounts().find(current))});
+    }
+    window.addEventListener('storage',event=>{
+      if(event.key!==registryKey)return;
+      if(!readAccounts().some(current)){goToRemaining();return;}
+      refresh();
+    });
     accountMenu.on('beforeshow',refresh);
     refresh();
     button.__basisSwitcher=true;

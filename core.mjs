@@ -58,7 +58,7 @@ export function contextFor(url, referer, publicOrigin) {
 }
 export function injectClient(html, slot) {
   const prefix=slot?accountPath(slot):'';
-  const tag=`<script src="${ROOT}/client.js?v=1" data-slot="${slot || 'primary'}"></script>`;
+  const tag=`<script src="${ROOT}/accounts.js?v=1.0.2"></script><script src="${ROOT}/client.js?v=1.0.2" data-slot="${slot || 'primary'}"></script>`;
   let result=html.replace(/<head\b[^>]*>/i,match=>match+tag);
   // These relative script URLs in Kerio's index traverse above the account prefix.
   if(slot)result=result.replace(/(["'])\.\.\/\.\.\/shared\//g,`$1${prefix}/shared/`);

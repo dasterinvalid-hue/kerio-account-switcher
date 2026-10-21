@@ -6,11 +6,11 @@ import {fileURLToPath} from 'node:url';
 import {ROOT,SLOT,contextFor,mailPath,incomingCookies,outgoingCookie,rewriteLocation,injectClient} from './core.mjs';
 
 const directory=fileURLToPath(new URL('.',import.meta.url));
-const assets=new Map(['client.js','worker.js','start.js'].map(name=>[`${ROOT}/${name}`,fs.readFileSync(directory+'public/'+name)]));
+const assets=new Map(['accounts.js','bridge.js','client.js','worker.js','start.js'].map(name=>[`${ROOT}/${name}`,fs.readFileSync(directory+'public/'+name)]));
 const hopHeaders=['connection','keep-alive','proxy-authenticate','proxy-authorization','te','trailer','transfer-encoding','upgrade'];
 function stripHop(headers){const out={...headers};for(const h of (headers.connection||'').split(','))delete out[h.trim().toLowerCase()];for(const h of hopHeaders)delete out[h];return out;}
 function respond(res,status,body,type='text/plain; charset=utf-8',extra={}){res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...extra});res.end(body);}
-function isShellPath(path,slot){return path==='/webmail/'||path==='/webmail/index.html'||(slot&&path.startsWith('/webmail/login'));}
+function isShellPath(path,slot){return path==='/webmail/'||path==='/webmail/index.html'||path.startsWith('/webmail/login');}
 function staticAsset(path){
   return /^\/(?:webmail\/lib|weblib|shared\/(?:2fa|ms_graph))\/.+\.(?:js|css|png|gif|jpe?g|svg|woff2?|ttf|ico)$/i.test(path)
     || /^\/webmail\/webmail[23](?:color-[a-f0-9]{6})?(?:-dark)?\.(?:js|css)$/i.test(path);
@@ -69,7 +69,43 @@ export function createGateway(config) {
   }
   const handler=(req,res)=>{
     let url,context;try{({url,context}=parse(req));}catch{return respond(res,400,'Invalid request');}
-    if(url.pathname===ROOT+'/health')return respond(res,200,JSON.stringify({status:'ok',version:'1.0.1'}),'application/json');
+    if(url.pathname===ROOT+'/health')return respond(res,200,JSON.stringify({status:'ok',version:'1.0.2'}),'application/json');
+    if(url.pathname===ROOT+'/bridge'){
+      const account=url.searchParams.get('account');
+      if(req.method!=='GET')return respond(res,405,'Method not allowed');
+      if(account!=='primary'&&!SLOT.test(account||''))return respond(res,400,'Invalid account identifier');
+      return respond(res,200,'<!doctype html><html><meta charset="utf-8"><title>Выход из аккаунта</title><script src="/_kas/bridge.js" data-account="'+account+'"></script></html>','text/html; charset=utf-8',{'Content-Security-Policy':"default-src 'none'; script-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'"});
+    }
+    if(context.path.split('?')[0]==='/webmail/_kas/session'){
+      if(req.method!=='POST')return respond(res,405,'Method not allowed');
+      if(req.headers.origin!==publicOrigin||req.headers['x-kas-action']!=='logout')return respond(res,403,'Invalid session action');
+      const cookies=incomingCookies(req.headers.cookie,context.slot);
+      const pairs=new Map(cookies.split(';').map(s=>s.trim()).filter(Boolean).map(s=>{const p=s.indexOf('=');return [s.slice(0,p),s.slice(p+1)];}));
+      const complete=()=>{
+        const cleared=[];
+        for(const name of ['SESSION_CONNECT_WEBMAIL','TOKEN_CONNECT_WEBMAIL'])for(const path of ['/','/webmail/']){
+          cleared.push(outgoingCookie(name+'=; Path='+path+'; Max-Age=0; HttpOnly; SameSite=Lax'+(publicUrl.protocol==='https:'?'; Secure':''),context.slot));
+        }
+        respond(res,200,'{"ok":true}','application/json',{'Set-Cookie':cleared});
+      };
+      if(!pairs.get('SESSION_CONNECT_WEBMAIL')){req.resume();return complete();}
+      if(!pairs.get('TOKEN_CONNECT_WEBMAIL')){req.resume();return respond(res,409,'{"ok":false}','application/json');}
+      const opts=options(req,{...context,path:'/webmail/api/jsonrpc/'});
+      opts.headers['content-type']='application/json';opts.headers['x-token']=pairs.get('TOKEN_CONNECT_WEBMAIL');
+      // This internal response is parsed here, not by the browser's decoder.
+      opts.headers['accept-encoding']='identity';
+      delete opts.headers['content-length'];delete opts.headers['x-kas-action'];
+      const logout=transport.request(opts,response=>{
+        let body='';response.setEncoding('utf8');
+        response.on('data',chunk=>{body+=chunk;if(body.length>65536)response.destroy();});
+        response.on('error',()=>{if(!res.writableEnded)respond(res,502,'{"ok":false}','application/json');});
+        response.on('end',()=>{try{const value=JSON.parse(body);if(response.statusCode===200&&(('result' in value&&!value.error)||value.error?.code===-32001))return complete();}catch{}respond(res,502,'{"ok":false}','application/json');});
+      });
+      logout.setTimeout(10000,()=>logout.destroy());
+      logout.on('error',()=>{if(!res.writableEnded)respond(res,502,'{"ok":false}','application/json');});
+      res.on('close',()=>{if(!res.writableEnded)logout.destroy();});
+      req.resume();logout.end(JSON.stringify({jsonrpc:'2.0',id:1,method:'Session.logout',params:{}}));return;
+    }
     if(url.pathname===ROOT+'/connect'){
       const account=url.searchParams.get('account');
       if(req.method!=='GET')return respond(res,405,'Method not allowed');

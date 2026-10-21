@@ -158,7 +158,7 @@ $node=Join-Path $InstallDir 'runtime\node.exe'
 Native-Check $node $configPath certificate
 if($backendListeners.Count){Native-Check $node $configPath upstream}
 $originalPort=$xml.SelectSingleNode('/config/table[@name="service-https"]/variable[@name="Port"]')
-$state=[ordered]@{version='1.0.1';status='preparing';kerioPath=$KerioPath;hostName=$HostName;backendPort=$BackendPort;originalHttps=@($httpsItems|ForEach-Object OuterXml);originalDefaultPort=$(if($originalPort){$originalPort.InnerText}else{$null});originalProxy=@{UseProxiedInfo=$proxyEnabled.InnerText;TrustedProxyAddressGroup=$proxyGroup.InnerText};proxyItemGuid=[guid]::NewGuid().ToString();appliedHttps=@();serviceSid='';aclPaths=@();installedUtc=[DateTime]::UtcNow.ToString('o')}
+$state=[ordered]@{version='1.0.2';status='preparing';kerioPath=$KerioPath;hostName=$HostName;backendPort=$BackendPort;originalHttps=@($httpsItems|ForEach-Object OuterXml);originalDefaultPort=$(if($originalPort){$originalPort.InnerText}else{$null});originalProxy=@{UseProxiedInfo=$proxyEnabled.InnerText;TrustedProxyAddressGroup=$proxyGroup.InnerText};proxyItemGuid=[guid]::NewGuid().ToString();appliedHttps=@();serviceSid='';aclPaths=@();installedUtc=[DateTime]::UtcNow.ToString('o')}
 Write-State $state
 $changed=$false;$stopped=$false
 try {
@@ -223,7 +223,7 @@ try {
   $state.status='installed';Write-State $state
   $uninstallKey='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\KerioAccountSwitcher'
   New-Item -Path $uninstallKey -Force | Out-Null
-  $properties=@{DisplayName='Kerio Account Switcher';DisplayVersion='1.0.1';Publisher='Kerio Account Switcher contributors';InstallLocation=$InstallDir;UninstallString=('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "'+$InstallDir+'\windows\Manage-KerioSwitcher.ps1" -Mode Uninstall -InstallDir "'+$InstallDir+'"')}
+  $properties=@{DisplayName='Kerio Account Switcher';DisplayVersion='1.0.2';Publisher='Kerio Account Switcher contributors';InstallLocation=$InstallDir;UninstallString=('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "'+$InstallDir+'\windows\Manage-KerioSwitcher.ps1" -Mode Uninstall -InstallDir "'+$InstallDir+'"')}
   foreach($name in $properties.Keys){New-ItemProperty -Path $uninstallKey -Name $name -Value $properties[$name] -PropertyType String -Force | Out-Null}
   Write-Output "INSTALLED: https://$HostName/webmail/"
   Write-Output "Rollback: powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstallDir\windows\Manage-KerioSwitcher.ps1`" -Mode Uninstall -InstallDir `"$InstallDir`""

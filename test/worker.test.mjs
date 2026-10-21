@@ -67,6 +67,12 @@ test('primary mailbox navigation from the launcher cannot inherit the previous a
   assert.equal(forwarded.url,origin+'/webmail/');
   assert.equal(forwarded.headers.get('X-KAS-Worker'),null);
 });
+test('logout bridge reaches primary cookies without inheriting its parent account',async()=>{
+  assert.equal(await worker()(navigation(origin+'/_kas/bridge?account=primary')),undefined);
+  const request=new Request(origin+'/webmail/_kas/session',{method:'POST',headers:{'X-KAS-Action':'logout'}});
+  const forwarded=await worker(origin+'/_kas/bridge?account=primary')(request);
+  assert.equal(forwarded.url,request.url);
+});
 test('login POST navigation preserves method, body and account prefix',async()=>{
   const forwarded=await worker()(navigation(origin+'/webmail/login/',{method:'POST',body:'test=form',headers:{'Content-Type':'application/x-www-form-urlencoded'}}));
   assert.equal(forwarded.url,origin+prefix+'/webmail/login/');
