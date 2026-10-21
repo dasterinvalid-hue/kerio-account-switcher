@@ -58,7 +58,7 @@ test('Kerio login redirect is handed to the browser instead of returning a follo
   assert.equal(forwarded.redirect,'manual');
 });
 test('recovery launcher and worker scripts bypass the mail interceptor',async()=>{
-  for(const path of ['/_kas/connect?account='+'b'.repeat(32),'/_kas/start.js','/_kas/worker.js?v=4']){
+  for(const path of ['/_kas/connect?account='+'b'.repeat(32),'/_kas/start.js','/_kas/worker.js?v=5']){
     assert.equal(await worker()(navigation(origin+path)),undefined);
   }
 });
@@ -89,4 +89,22 @@ test('ordinary API requests keep credentials and token, external requests are un
   assert.equal(forwarded.credentials,'include');
   assert.equal(forwarded.headers.get('X-Token'),'test-token');
   assert.equal(await worker()(new Request('https://external.example.test/file')),undefined);
+});
+
+test('already-isolated API and resource requests bypass worker fetch ownership',async()=>{
+  let networkCalls=0;
+  const dispatch=worker(origin+prefix+'/webmail/',()=>{networkCalls++;return new Response('ok');});
+  // Repeated account switches must not start worker-owned copies of a page's
+  // long polls. Cookies/CSRF headers stay on the original browser request.
+  for(let i=0;i<20;i++){
+    const request=new Request(origin+prefix+'/webmail/api/jsonrpc/',{
+      method:'POST',body:JSON.stringify({method:'Changes.get',params:{timeout:600}}),
+      credentials:'include',headers:{'X-Token':'test-token'}
+    });
+    assert.equal(await dispatch(request),undefined);
+    assert.equal(request.bodyUsed,false);
+    assert.equal(request.headers.get('X-Token'),'test-token');
+  }
+  assert.equal(await dispatch(new Request(origin+prefix+'/webmail/webmail2.js')),undefined);
+  assert.equal(networkCalls,0);
 });

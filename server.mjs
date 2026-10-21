@@ -69,7 +69,7 @@ export function createGateway(config) {
   }
   const handler=(req,res)=>{
     let url,context;try{({url,context}=parse(req));}catch{return respond(res,400,'Invalid request');}
-    if(url.pathname===ROOT+'/health')return respond(res,200,JSON.stringify({status:'ok',version:'1.0.0'}),'application/json');
+    if(url.pathname===ROOT+'/health')return respond(res,200,JSON.stringify({status:'ok',version:'1.0.1'}),'application/json');
     if(url.pathname===ROOT+'/connect'){
       const account=url.searchParams.get('account');
       if(req.method!=='GET')return respond(res,405,'Method not allowed');
