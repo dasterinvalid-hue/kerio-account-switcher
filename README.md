@@ -6,7 +6,7 @@
 
 ## Скачать
 
-[Релиз и установочные файлы](https://github.com/dasterinvalid-hue/kerio-account-switcher/releases/latest)
+[Релизы и установочные файлы](https://github.com/dasterinvalid-hue/kerio-account-switcher/releases)
 
 - `KerioAccountSwitcher-Setup-1.0.0.exe` — мастер установки на русском, требуется администратор Windows.
 - `KerioAccountSwitcher-1.0.0-windows-x64.zip` — обычный архив с теми же файлами, исходниками и скриптом установки.
