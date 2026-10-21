@@ -17,7 +17,7 @@ test('an already-installed worker opens the account without a register/update ro
   await vm.runInNewContext(source,{
     document:{currentScript:{dataset:{account:'e'.repeat(32)}}},
     navigator:{serviceWorker:{
-      getRegistration:async()=>({active:{state:'activated',scriptURL:'https://mail.example.test/_kas/worker.js?v=4'}}),
+      getRegistration:async()=>({active:{state:'activated',scriptURL:'https://mail.example.test/_kas/worker.js?v=5'}}),
       register:async()=>{throw new Error('Warm switch must not register again');},ready:Promise.resolve()
     }},location:{replace:url=>{destination=url;}}
   });
@@ -30,7 +30,7 @@ test('launcher waits for the replacement worker before opening the new account',
   const done=vm.runInNewContext(source,{
     document:{currentScript:{dataset:{account}},getElementById:()=>({})},
     navigator:{serviceWorker:{ready:Promise.resolve(),register:async(url,options)=>{
-      assert.equal(url,'/_kas/worker.js?v=4');assert.equal(options.updateViaCache,'none');
+      assert.equal(url,'/_kas/worker.js?v=5');assert.equal(options.updateViaCache,'none');
       return {installing};
     }}},
     location:{replace:url=>{navigated=url;}},setTimeout,clearTimeout

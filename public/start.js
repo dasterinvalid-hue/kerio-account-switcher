@@ -8,8 +8,8 @@
     if(!('serviceWorker' in navigator))throw new Error('Браузер не поддерживает отдельные сеансы. Используйте современный Chrome, Edge или Firefox.');
     // Reuse an installed worker without a network update check on each switch.
     let registration=await navigator.serviceWorker.getRegistration?.('/_kas/');
-    if(registration?.active?.state!=='activated'||!registration.active.scriptURL.endsWith('/_kas/worker.js?v=4')){
-      registration=await navigator.serviceWorker.register('/_kas/worker.js?v=4',{scope:'/_kas/',updateViaCache:'none'});
+    if(registration?.active?.state!=='activated'||!registration.active.scriptURL.endsWith('/_kas/worker.js?v=5')){
+      registration=await navigator.serviceWorker.register('/_kas/worker.js?v=5',{scope:'/_kas/',updateViaCache:'none'});
     }
     const installing=registration.installing||registration.waiting;
     if(installing&&installing.state!=='activated')await new Promise((resolve,reject)=>{

@@ -23,19 +23,19 @@ $framework=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
 $csc=Join-Path $framework 'csc.exe'
 & $csc /nologo /target:exe /platform:x64 /optimize+ ("/out:"+(Join-Path $package 'KerioAccountSwitcher.Service.exe')) /r:System.ServiceProcess.dll (Join-Path $source 'windows\ServiceHost.cs')
 if($LASTEXITCODE -ne 0){throw 'Service host compilation failed'}
-@{nodeVersion=$version;nodeSha256=$nodeHash;version='1.0.0'} | ConvertTo-Json | Set-Content (Join-Path $package 'build-info.json') -Encoding UTF8
+@{nodeVersion=$version;nodeSha256=$nodeHash;version='1.0.1'} | ConvertTo-Json | Set-Content (Join-Path $package 'build-info.json') -Encoding UTF8
 $files=Get-ChildItem $package -Recurse -File | ForEach-Object {@{path=$_.FullName.Substring($package.Length+1).Replace('\','/');sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}}
 $files | ConvertTo-Json -Depth 3 | Set-Content (Join-Path $package 'package-manifest.json') -Encoding UTF8
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 Add-Type -AssemblyName System.IO.Compression
-$zip=Join-Path $OutputDir 'KerioAccountSwitcher-1.0.0-windows-x64.zip'
+$zip=Join-Path $OutputDir 'KerioAccountSwitcher-1.0.1-windows-x64.zip'
 if(Test-Path $zip){Remove-Item -LiteralPath $zip}
 $archive=[IO.Compression.ZipFile]::Open($zip,[IO.Compression.ZipArchiveMode]::Create)
 try{Get-ChildItem $package -Recurse -File | ForEach-Object {
   $entry=$_.FullName.Substring($package.Length+1).Replace('\','/')
   [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$_.FullName,$entry,[IO.Compression.CompressionLevel]::Optimal)
 }}finally{$archive.Dispose()}
-$exe=Join-Path $OutputDir 'KerioAccountSwitcher-Setup-1.0.0.exe'
+$exe=Join-Path $OutputDir 'KerioAccountSwitcher-Setup-1.0.1.exe'
 & $csc /nologo /codepage:65001 /target:winexe /platform:x64 /optimize+ ("/out:"+$exe) ("/win32manifest:"+(Join-Path $source 'windows\setup.manifest')) ("/resource:"+$zip+',payload.zip') /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll (Join-Path $source 'windows\Setup.cs')
 if($LASTEXITCODE -ne 0){throw 'Setup compilation failed'}
 # Inspect the embedded archive without executing the UAC-elevated installer.

@@ -13,7 +13,7 @@ sealed class SetupForm : Form {
     Button install = new Button(), uninstall = new Button();
     bool busy;
     public SetupForm() {
-        Text="Kerio Account Switcher — установка 1.0.0"; ClientSize=new Size(750,610);
+        Text="Kerio Account Switcher — установка 1.0.1"; ClientSize=new Size(750,610);
         Font=new Font("Segoe UI",10); StartPosition=FormStartPosition.CenterScreen;
         MinimumSize=Size; MaximizeBox=false;
         var intro=new Label {Left=20,Top=16,Width=710,Height=68,Text="Устанавливайте на сервер Kerio Connect (Windows x64).\nПереключение аккаунтов появится у всех в браузере.\nПри установке и удалении Kerio ненадолго перезапускается."};Controls.Add(intro);

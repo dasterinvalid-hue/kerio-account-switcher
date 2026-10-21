@@ -7,6 +7,12 @@ self.addEventListener('fetch',event=>{
   const target=new URL(event.request.url);
   if(target.origin!==self.location.origin)return;
   if(!re.test(target.pathname)&&!eligible(target.pathname))return;
+  // The page already prefixes XHR/fetch URLs. Let the browser own these
+  // requests so closing/navigating the document cancels its long polls.
+  // respondWith(fetch(...)) can keep the worker's fetch alive after its
+  // originating page disappears, exhausting Chromium's HTTP/1 connection pool.
+  // Navigations still need X-KAS-Worker to pass the server's bootstrap gate.
+  if(re.test(target.pathname)&&event.request.mode!=='navigate')return;
   event.respondWith((async()=>{
     let match=target.pathname.match(re);
     if(!match){
