@@ -1,0 +1,13 @@
+config.json
+local-test.json
+install-state.json
+runtime/
+dist/
+logs/
+backup/
+*.exe
+*.zip
+*.crt
+*.key
+*.pfx
+*.log

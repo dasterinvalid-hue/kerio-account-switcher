@@ -1,0 +1,12 @@
+{
+  "publicOrigin": "https://mail.example.com",
+  "upstreamOrigin": "https://mail.example.com:8843",
+  "connectAddress": "127.0.0.1",
+  "listenAddress": "0.0.0.0",
+  "listenPort": 443,
+  "kerioLongPollSeconds": 600,
+  "tls": {
+    "certPath": "C:\\Program Files\\Kerio\\MailServer\\sslcert\\server.crt",
+    "keyPath": "C:\\Program Files\\Kerio\\MailServer\\sslcert\\server.key"
+  }
+}
