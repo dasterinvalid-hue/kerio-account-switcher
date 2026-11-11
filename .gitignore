@@ -5,6 +5,7 @@ runtime/
 dist/
 logs/
 backup/
+tls/
 *.exe
 *.zip
 *.crt

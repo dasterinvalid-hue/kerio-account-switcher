@@ -13,7 +13,7 @@ sealed class SetupForm : Form {
     Button install = new Button(), uninstall = new Button();
     bool busy;
     public SetupForm() {
-        Text="Kerio Account Switcher — установка 1.0.2"; ClientSize=new Size(750,610);
+        Text="Kerio Account Switcher — установка 1.0.3"; ClientSize=new Size(750,610);
         Font=new Font("Segoe UI",10); StartPosition=FormStartPosition.CenterScreen;
         MinimumSize=Size; MaximizeBox=false;
         var intro=new Label {Left=20,Top=16,Width=710,Height=68,Text="Устанавливайте на сервер Kerio Connect (Windows x64).\nПереключение аккаунтов появится у всех в браузере.\nПри установке и удалении Kerio ненадолго перезапускается."};Controls.Add(intro);
@@ -37,7 +37,7 @@ sealed class SetupForm : Form {
         try {
             string args="-NoProfile -ExecutionPolicy Bypass -File "+Quote(Path.Combine(temp,"windows","Manage-KerioSwitcher.ps1"))+" -Mode "+(remove?"Uninstall":"Install")+" -HostName "+Quote(host.Text.Trim())+" -KerioPath "+Quote(kerio.Text.Trim())+" -InstallDir "+Quote(target.Text.Trim())+" -BackendPort "+port.Value;
             if(!remove && File.Exists(Path.Combine(target.Text.Trim(),"install-state.json"))) {
-                args="-NoProfile -ExecutionPolicy Bypass -File "+Quote(Path.Combine(temp,"windows","Update-1.0.2.ps1"))+" -InstallDir "+Quote(target.Text.Trim());
+                args="-NoProfile -ExecutionPolicy Bypass -File "+Quote(Path.Combine(temp,"windows","Update-1.0.3.ps1"))+" -InstallDir "+Quote(target.Text.Trim());
             }
             Append("Подготовка файлов…");
             await Task.Run(()=>{

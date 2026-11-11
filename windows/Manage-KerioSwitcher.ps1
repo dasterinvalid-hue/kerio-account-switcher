@@ -10,6 +10,7 @@ param(
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $serviceName='KerioAccountSwitcher'
+. (Join-Path $PSScriptRoot 'Certificate-Task.ps1')
 $statePath=Join-Path $InstallDir 'install-state.json'
 function Assert-Admin {
   $p=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -72,6 +73,7 @@ function Restore-Https($State) {
   Save-ConfigXml $xml $cfgPath
 }
 function Remove-ServiceRegistration {
+  Remove-CertificateTask
   if(Get-Service $serviceName -ErrorAction SilentlyContinue){
     Stop-Service $serviceName -ErrorAction SilentlyContinue
     & sc.exe delete $serviceName | Out-Null
@@ -113,6 +115,7 @@ $KerioPath=[IO.Path]::GetFullPath($KerioPath).TrimEnd('\')
 $InstallDir=[IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
 if($InstallDir.StartsWith('\\') -or $InstallDir.Length -lt 12 -or $InstallDir -eq $KerioPath){throw 'Invalid installation directory'}
 if(Get-Service $serviceName -ErrorAction SilentlyContinue){throw 'Module is already installed. Uninstall it before installing this release.'}
+if(Get-ScheduledTask -TaskName $certificateTaskName -ErrorAction SilentlyContinue){throw 'Certificate task already exists. Use the update script for an existing installation.'}
 if(Test-Path $statePath){throw 'This directory already contains installation state. Use a new directory or follow the update instructions.'}
 $cfgPath=Join-Path $KerioPath 'mailserver.cfg'
 $xml=Read-ConfigXml $cfgPath
@@ -137,29 +140,31 @@ if(Test-Path (Join-Path $packageRoot 'package-manifest.json')){
     if((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry.sha256){throw ('Package checksum mismatch: '+$entry.path)}
   }
 }
-foreach($file in 'runtime\node.exe','KerioAccountSwitcher.Service.exe','server.mjs','core.mjs','public\client.js'){
+foreach($file in 'runtime\node.exe','KerioAccountSwitcher.Service.exe','server.mjs','core.mjs','tls.mjs','windows\Certificate-Task.ps1','windows\Sync-KerioCertificate.ps1','windows\publish-certificate.mjs','public\client.js'){
   if(-not(Test-Path (Join-Path $packageRoot $file))){throw "Package file missing: $file"}
 }
 Set-ProtectedDirectory $InstallDir
 Set-ProtectedDirectory (Join-Path $InstallDir 'backup')
 New-Item -ItemType Directory -Path (Join-Path $InstallDir 'logs') -Force | Out-Null
-foreach($file in 'server.mjs','core.mjs','package.json','README.md','LICENSE','KerioAccountSwitcher.Service.exe'){
+foreach($file in 'server.mjs','core.mjs','tls.mjs','package.json','README.md','README.en.md','CHANGELOG.md','LICENSE','KerioAccountSwitcher.Service.exe'){
   Copy-Item -LiteralPath (Join-Path $packageRoot $file) -Destination $InstallDir
 }
 foreach($dir in 'runtime','public','windows'){
   Copy-Item -LiteralPath (Join-Path $packageRoot $dir) -Destination $InstallDir -Recurse
 }
 $longPoll=$xml.SelectSingleNode('//variable[@name="LongPollTimeout"]')
-$config=[ordered]@{publicOrigin="https://$HostName";upstreamOrigin="https://${HostName}:$BackendPort";connectAddress='127.0.0.1';listenAddress='0.0.0.0';listenPort=443;kerioLongPollSeconds=600;tls=@{certPath=(Join-Path $KerioPath 'sslcert\server.crt');keyPath=(Join-Path $KerioPath 'sslcert\server.key')}}
+$config=[ordered]@{publicOrigin="https://$HostName";upstreamOrigin="https://${HostName}:$BackendPort";connectAddress='127.0.0.1';listenAddress='0.0.0.0';listenPort=443;kerioLongPollSeconds=600;tls=@{bundlePath=(Join-Path $InstallDir 'tls\active.json')}}
 if($longPoll){$config.kerioLongPollSeconds=[int]$longPoll.InnerText}
 $configPath=Join-Path $InstallDir 'config.json'
 $config | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configPath -Encoding UTF8
 $node=Join-Path $InstallDir 'runtime\node.exe'
+$originalPort=$xml.SelectSingleNode('/config/table[@name="service-https"]/variable[@name="Port"]')
+$state=[ordered]@{version='1.0.3';status='preparing';kerioPath=$KerioPath;hostName=$HostName;backendPort=$BackendPort;originalHttps=@($httpsItems|ForEach-Object OuterXml);originalDefaultPort=$(if($originalPort){$originalPort.InnerText}else{$null});originalProxy=@{UseProxiedInfo=$proxyEnabled.InnerText;TrustedProxyAddressGroup=$proxyGroup.InnerText};proxyItemGuid=[guid]::NewGuid().ToString();appliedHttps=@();serviceSid='';aclPaths=@();certificateTask=$certificateTaskName;installedUtc=[DateTime]::UtcNow.ToString('o')}
+Write-State $state
+Set-CertificateDirectory $InstallDir ''
+Invoke-CertificateSync $InstallDir
 Native-Check $node $configPath certificate
 if($backendListeners.Count){Native-Check $node $configPath upstream}
-$originalPort=$xml.SelectSingleNode('/config/table[@name="service-https"]/variable[@name="Port"]')
-$state=[ordered]@{version='1.0.2';status='preparing';kerioPath=$KerioPath;hostName=$HostName;backendPort=$BackendPort;originalHttps=@($httpsItems|ForEach-Object OuterXml);originalDefaultPort=$(if($originalPort){$originalPort.InnerText}else{$null});originalProxy=@{UseProxiedInfo=$proxyEnabled.InnerText;TrustedProxyAddressGroup=$proxyGroup.InnerText};proxyItemGuid=[guid]::NewGuid().ToString();appliedHttps=@();serviceSid='';aclPaths=@();installedUtc=[DateTime]::UtcNow.ToString('o')}
-Write-State $state
 $changed=$false;$stopped=$false
 try {
   Write-Output 'Preflight passed. Restarting Kerio to free HTTPS port 443.'
@@ -209,12 +214,9 @@ try {
   $logs=Join-Path $InstallDir 'logs';$acl=Get-Acl -LiteralPath $logs
   $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'Modify','ContainerInherit,ObjectInherit','None','Allow'))
   Set-Acl -LiteralPath $logs -AclObject $acl
-  foreach($path in @((Join-Path $KerioPath 'sslcert'),$config.tls.certPath,$config.tls.keyPath)){
-    $acl=Get-Acl -LiteralPath $path
-    $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'ReadAndExecute','Allow'))
-    Set-Acl -LiteralPath $path -AclObject $acl
-    $state.aclPaths+=,$path;Write-State $state
-  }
+  Set-CertificateDirectory $InstallDir $state.serviceSid
+  Register-CertificateTask $InstallDir
+  Write-State $state
   New-NetFirewallRule -Name 'KerioAccountSwitcher-HTTPS' -DisplayName 'Kerio Account Switcher HTTPS' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 443 -Program $node -Profile Any | Out-Null
   Start-Service $serviceName;Wait-ServiceState $serviceName Running
   $ready=$false
@@ -223,7 +225,7 @@ try {
   $state.status='installed';Write-State $state
   $uninstallKey='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\KerioAccountSwitcher'
   New-Item -Path $uninstallKey -Force | Out-Null
-  $properties=@{DisplayName='Kerio Account Switcher';DisplayVersion='1.0.2';Publisher='Kerio Account Switcher contributors';InstallLocation=$InstallDir;UninstallString=('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "'+$InstallDir+'\windows\Manage-KerioSwitcher.ps1" -Mode Uninstall -InstallDir "'+$InstallDir+'"')}
+  $properties=@{DisplayName='Kerio Account Switcher';DisplayVersion='1.0.3';Publisher='Kerio Account Switcher contributors';InstallLocation=$InstallDir;UninstallString=('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "'+$InstallDir+'\windows\Manage-KerioSwitcher.ps1" -Mode Uninstall -InstallDir "'+$InstallDir+'"')}
   foreach($name in $properties.Keys){New-ItemProperty -Path $uninstallKey -Name $name -Value $properties[$name] -PropertyType String -Force | Out-Null}
   Write-Output "INSTALLED: https://$HostName/webmail/"
   Write-Output "Rollback: powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstallDir\windows\Manage-KerioSwitcher.ps1`" -Mode Uninstall -InstallDir `"$InstallDir`""

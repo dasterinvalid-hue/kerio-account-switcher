@@ -6,7 +6,6 @@
   "listenPort": 443,
   "kerioLongPollSeconds": 600,
   "tls": {
-    "certPath": "C:\\Program Files\\Kerio\\MailServer\\sslcert\\server.crt",
-    "keyPath": "C:\\Program Files\\Kerio\\MailServer\\sslcert\\server.key"
+    "bundlePath": "C:\\Program Files\\Kerio Account Switcher\\tls\\active.json"
   }
 }

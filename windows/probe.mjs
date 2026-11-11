@@ -1,16 +1,11 @@
 import fs from 'node:fs';
 import https from 'node:https';
-import tls from 'node:tls';
-import {X509Certificate} from 'node:crypto';
+import {readTlsPair} from '../tls.mjs';
 
 const config=JSON.parse(fs.readFileSync(process.argv[2],'utf8').replace(/^\uFEFF/,''));
 const mode=process.argv[3]||'gateway';
 const publicUrl=new URL(config.publicOrigin);
-const cert=fs.readFileSync(config.tls.certPath),key=fs.readFileSync(config.tls.keyPath);
-tls.createSecureContext({cert,key});
-const x509=new X509Certificate(cert);
-if(!x509.checkHost(publicUrl.hostname))throw new Error('Certificate does not cover hostname');
-if(Date.now()<Date.parse(x509.validFrom)||Date.now()>Date.parse(x509.validTo))throw new Error('Certificate is outside its validity period');
+readTlsPair(config);
 async function request(port,path){return new Promise((resolve,reject)=>{
   const req=https.request({hostname:publicUrl.hostname,servername:publicUrl.hostname,port,
     lookup:(h,o,cb)=>o?.all?cb(null,[{address:'127.0.0.1',family:4}]):cb(null,'127.0.0.1',4),

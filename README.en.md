@@ -2,7 +2,7 @@
 
 Use two or more **Kerio Connect webmail accounts in the same browser**, on the same domain, with an account switcher in the profile menu. This free, MIT-licensed Windows server add-on keeps account sessions separate, so signing out of one account does not sign out the others.
 
-[**Download the Windows installer or ZIP**](https://github.com/dasterinvalid-hue/kerio-account-switcher/releases/tag/v1.0.2) · [Русская инструкция](https://github.com/dasterinvalid-hue/kerio-account-switcher/blob/main/README.md) · [Report an issue](https://github.com/dasterinvalid-hue/kerio-account-switcher/issues) · [MIT license](https://github.com/dasterinvalid-hue/kerio-account-switcher/blob/main/LICENSE)
+[**Download the Windows installer or ZIP**](https://github.com/dasterinvalid-hue/kerio-account-switcher/releases/tag/v1.0.3) · [Русская инструкция](https://github.com/dasterinvalid-hue/kerio-account-switcher/blob/main/README.md) · [Report an issue](https://github.com/dasterinvalid-hue/kerio-account-switcher/issues) · [MIT license](https://github.com/dasterinvalid-hue/kerio-account-switcher/blob/main/LICENSE)
 
 ## Account controls in 1.0.2
 
@@ -10,7 +10,7 @@ Each account card has a **Выйти (Sign out)** button on the right. It revoke
 
 Repeated sign-ins to the same normalized login address share one card. Existing duplicates merge on reload; signing out ends the sessions associated with that card. Other open tabs receive registry changes. Failed logout requests keep the card available for retry.
 
-The new EXE also updates an existing installation, or use `windows/Update-1.0.2.ps1` from a separately extracted ZIP. Reload open webmail tabs after upgrading.
+The new EXE also updates an existing installation, or use `windows/Update-1.0.3.ps1` from a separately extracted ZIP. Reload open webmail tabs after upgrading.
 
 ## What it does
 
@@ -22,16 +22,26 @@ The new EXE also updates an existing installation, or use `windows/Update-1.0.2.
 
 A typical use is switching between a personal work mailbox and a department mailbox when you are authorized to sign in to both. This module does not create mailboxes or grant access to them. Kerio still authenticates every account.
 
+## Automatic certificate renewal handling in 1.0.3
+
+The Windows task `KerioAccountSwitcher-CertificateSync` runs as SYSTEM at startup and every minute. It reads the active certificate name from Kerio's `Misc/SslCertificate`, validates the hostname, validity period and private key, then atomically publishes the pair to protected `tls/active.json`. Renaming `server` to `server1` or resetting the original key's ACL no longer breaks the gateway.
+
+The gateway keeps its restricted virtual service account. It reads the snapshot every 15 seconds and replaces its TLS context without dropping established connections. Only SYSTEM and administrators can write the snapshot. Missing, incomplete or mismatched source files leave the last working pair untouched; the persisted copy also survives service restarts and deletion of Kerio's old files. Updates normally take up to 75 seconds.
+
+This does not issue or renew certificates: Kerio must obtain a valid certificate for the public hostname with a trusted chain. An expired snapshot cannot substitute for a valid certificate. If no valid snapshot exists at startup, the process waits and retries, but HTTPS is not yet available. Multiple SNI certificates need separate compatibility testing. See [CHANGELOG](CHANGELOG.md).
+
+Run `Get-ScheduledTaskInfo -TaskName KerioAccountSwitcher-CertificateSync` to inspect the latest result (`0` is success, `1` means the previous snapshot was retained). Use `Start-ScheduledTask -TaskName KerioAccountSwitcher-CertificateSync` for an immediate retry. Never publish the `tls` directory: its snapshot contains the private key. Keys in `test/tls-fixtures.mjs` are public test-only fixtures, never production credentials.
+
 ## Compatibility and release status
 
-Version **1.0.2 is a pre-release**, targeting **Kerio Connect 10.0.9 (9754) on Windows x64**. Validation was performed on Windows 11 x64. Other Kerio builds and Windows versions need separate testing. The browser must support Service Workers; the repeated-switching checks were performed in a Chromium-based browser.
+Version **1.0.3 is a pre-release**, targeting **Kerio Connect 10.0.9 (9754) on Windows x64**. Validation was performed on Windows 11 x64. Other Kerio builds and Windows versions need separate testing. The browser must support Service Workers; the repeated-switching checks were performed in a Chromium-based browser.
 
 This is an independent open-source project, not an official GFI plugin. Full ActiveSync, CalDAV, WebDAV, Outlook Connector, SSO and two-factor authentication workflows have not been certified with this gateway. Test the clients your organization uses before rolling it out.
 
 ## Install on the Kerio server
 
 1. Back up Kerio and plan a brief interruption. A new installation restarts the Kerio service to transfer HTTPS port 443 to the gateway.
-2. Download `KerioAccountSwitcher-Setup-1.0.2.exe` or `KerioAccountSwitcher-1.0.2-windows-x64.zip` from the release page. Compare the file hashes with `SHA256SUMS.txt`.
+2. Download `KerioAccountSwitcher-Setup-1.0.3.exe` or `KerioAccountSwitcher-1.0.3-windows-x64.zip` from the release page. Compare the file hashes with `SHA256SUMS.txt`.
 3. Run the EXE as a Windows administrator on the Kerio server. The installer interface is in Russian. Enter your existing hostname, Kerio directory, module directory and backend HTTPS port (default: 8843).
 4. Alternatively, extract the ZIP into a separate folder and run this command from an elevated PowerShell window in that folder:
 
@@ -67,17 +77,17 @@ Local and session storage are namespaced per additional account. The shared acco
 
 Kerio's web-client files are not modified. SMTP, IMAP and POP ports remain with Kerio. Other HTTPS traffic on port 443 also passes through the gateway, without injecting the account menu. Session routing within one origin is not a security boundary between mutually untrusted sites.
 
-## Upgrade from 1.0.0 or 1.0.1 to 1.0.2
+## Upgrade from 1.0.0–1.0.2 to 1.0.3
 
-Version 1.0.1 fixes a Chromium hang after repeated account switching. The original failure was reproduced on the fifth transition; twenty transitions and contact loading then completed successfully after the fix. Automated coverage includes 21 Node.js tests and a PowerShell configuration rollback test.
+Version 1.0.3 adds certificate synchronization and preserves the account/session fixes from 1.0.1 and 1.0.2. Regression tests cover certificate rotation over live HTTPS, partial writes, startup from the persisted snapshot, and the Windows synchronization script, in addition to account isolation and PowerShell configuration rollback.
 
 Extract the new ZIP into a separate directory on the server and run, as administrator:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Update-1.0.2.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Update-1.0.3.ps1
 ```
 
-For a custom module directory, add `-InstallDir "D:\Kerio Account Switcher"`. The script validates the package hashes and service path, backs up changed files and restarts only the module if its runtime files change. It restores files if the HTTPS probe fails. KerioMailServer and its configuration are not restarted or modified by this patch.
+For a custom module directory, add `-InstallDir "D:\Kerio Account Switcher"`. The script validates package hashes and the service path, backs up files/configuration, prepares the certificate task and snapshot, then restarts only the module. It restores the previous files and task if the HTTPS probe fails. KerioMailServer and its configuration are not restarted or modified. The EXE selects this same upgrade path automatically. Gateway connections briefly disconnect during the upgrade; SMTP/IMAP are not restarted.
 
 If the browser was already stuck, save work in other tabs, fully quit the browser and reopen webmail after updating. Clearing cookies or the saved account list is not required.
 
@@ -100,7 +110,7 @@ To remove the module and restore the original HTTPS settings, run as administrat
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Program Files\Kerio Account Switcher\windows\Manage-KerioSwitcher.ps1" -Mode Uninstall
 ```
 
-Uninstalling restarts Kerio. It restores the original HTTPS listeners and proxy settings while preserving unrelated configuration, and removes the module's service, firewall rule and added TLS-file permissions. Backups and application files remain for the administrator. If the listeners were manually changed after installation, automatic removal stops to avoid overwriting them.
+Uninstalling restarts Kerio. It restores the original HTTPS listeners and proxy settings while preserving unrelated configuration, and removes the module's service, certificate synchronization task, firewall rule and TLS-file permissions from older versions. Protected TLS snapshots, backups and application files remain for the administrator. If the listeners were manually changed after installation, automatic removal stops to avoid overwriting them.
 
 ## Help other Kerio administrators
 

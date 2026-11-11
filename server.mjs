@@ -3,6 +3,7 @@ import https from 'node:https';
 import fs from 'node:fs';
 import {createGzip} from 'node:zlib';
 import {fileURLToPath} from 'node:url';
+import {readTlsPair,watchTls} from './tls.mjs';
 import {ROOT,SLOT,contextFor,mailPath,incomingCookies,outgoingCookie,rewriteLocation,injectClient} from './core.mjs';
 
 const directory=fileURLToPath(new URL('.',import.meta.url));
@@ -69,7 +70,7 @@ export function createGateway(config) {
   }
   const handler=(req,res)=>{
     let url,context;try{({url,context}=parse(req));}catch{return respond(res,400,'Invalid request');}
-    if(url.pathname===ROOT+'/health')return respond(res,200,JSON.stringify({status:'ok',version:'1.0.2'}),'application/json');
+    if(url.pathname===ROOT+'/health')return respond(res,200,JSON.stringify({status:'ok',version:'1.0.3'}),'application/json');
     if(url.pathname===ROOT+'/bridge'){
       const account=url.searchParams.get('account');
       if(req.method!=='GET')return respond(res,405,'Method not allowed');
@@ -176,20 +177,9 @@ export function createGateway(config) {
     res.on('close',()=>{if(!res.writableEnded)upstreamRequest.destroy();});
     req.pipe(upstreamRequest);
   };
-  const server=config.testMode ? http.createServer(handler) : https.createServer({key:fs.readFileSync(config.tls.keyPath),cert:fs.readFileSync(config.tls.certPath),minVersion:'TLSv1.2'},handler);
-  if(!config.testMode){
-    // Read the pair together. A partial certificate renewal keeps the last valid pair.
-    let lastPair=fs.readFileSync(config.tls.certPath,'utf8')+fs.readFileSync(config.tls.keyPath,'utf8');
-    let warned=false;
-    const refreshTls=()=>{try{
-      const cert=fs.readFileSync(config.tls.certPath,'utf8'),key=fs.readFileSync(config.tls.keyPath,'utf8');
-      if(cert+key===lastPair)return;
-      server.setSecureContext({cert,key,minVersion:'TLSv1.2'});lastPair=cert+key;warned=false;
-      console.log('TLS certificate reloaded');
-    }catch{if(!warned)console.error('TLS reload failed; retaining previous certificate');warned=true;}};
-    const tlsTimer=setInterval(refreshTls,15000);tlsTimer.unref();
-    server.on('close',()=>clearInterval(tlsTimer));
-  }
+  const initialTls=config.testMode?null:readTlsPair(config);
+  const server=config.testMode?http.createServer(handler):https.createServer(initialTls.options,handler);
+  if(initialTls)watchTls(server,config,initialTls);
   server.headersTimeout=30000;server.requestTimeout=300000;
   server.on('upgrade',(req,client,head)=>{
     let context;try{({context}=parse(req));}catch{client.end('HTTP/1.1 400 Bad Request\r\n\r\n');return;}
@@ -209,6 +199,14 @@ export function createGateway(config) {
 }
 if(process.argv[1] && fileURLToPath(import.meta.url)===fileURLToPath(new URL('file:///'+process.argv[1].replaceAll('\\','/')))) {
   const config=JSON.parse(fs.readFileSync(process.argv[2] || directory+'config.json','utf8').replace(/^\uFEFF/,''));
+  // A first boot can race the certificate task. Stay alive and retry rather
+  // than causing a service recovery loop. A valid persisted bundle starts now.
+  while(!config.testMode){
+    try{readTlsPair(config);break;}catch{
+      console.error('Waiting for a valid TLS certificate; certificate sync will retry automatically');
+      await new Promise(resolve=>setTimeout(resolve,15000));
+    }
+  }
   const server=createGateway(config);
   server.listen(config.listenPort,config.listenAddress||'127.0.0.1',()=>console.log(`Kerio account gateway listening on ${config.listenAddress||'127.0.0.1'}:${config.listenPort}`));
   for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close(()=>process.exit(0)));
